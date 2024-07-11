@@ -56,26 +56,28 @@ int main() {
 	
 	int sock_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
 	printf("Client connected\n");
+
 	char buffer[1024];
 	if(recv(sock_fd,buffer,sizeof(buffer),0) == -1)
 	{
 		printf("recv failed\n");
 	}
 
+	char* method = strtok(buffer," ");
+	char* path = strtok(NULL," ");
+
+	printf("%s",path);
+
 	char* sucRes = "HTTP/1.1 200 OK\r\n\r\n";
 	char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
 
-	if(buffer[5] != ' ')
-	{
-		send(sock_fd,failRes,strlen(failRes),0);
-	}
-	else
-	{
-		send(sock_fd,sucRes,strlen(sucRes),0);
-	}
+	char* res = (strcmp(path, "/") == 0) ? sucRes : failRes;
+		
+		
+	send(sock_fd,res,strlen(res),0);
+	
 	
 
-	send(sock_fd,sucRes,strlen(sucRes),0);
 	
 	close(server_fd);
 
