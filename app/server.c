@@ -54,11 +54,29 @@ int main() {
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
 	
-	int conn_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+	int sock_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
 	printf("Client connected\n");
-	char* res = "HTTP/1.1 200 OK\r\n\r\n";
+	char buffer[1024];
+	if(recv(sock_fd,buffer,sizeof(buffer),0) == -1)
+	{
+		printf("recv failed\n");
+	}
 
-	send(conn_fd,res,strlen(res),0);
+	char* sucRes = "HTTP/1.1 200 OK\r\n\r\n";
+	char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
+
+	if(buffer[5] != ' ')
+	{
+		send(sock_fd,failRes,strlen(failRes),0);
+	}
+	else
+	{
+		send(sock_fd,sucRes,strlen(sucRes),0);
+	}
+	
+
+	send(sock_fd,sucRes,strlen(sucRes),0);
+	
 	close(server_fd);
 
 	return 0;
