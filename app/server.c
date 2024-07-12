@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <unistd.h>
 
+
+
 int main() {
 	// Disable output buffering
 	setbuf(stdout, NULL);
@@ -66,17 +68,26 @@ int main() {
 	char* method = strtok(buffer," ");
 	char* path = strtok(NULL," ");
 
-	printf("%s",path);
+	char* pathType = strtok(path,"/");
 
-	char* sucRes = "HTTP/1.1 200 OK\r\n\r\n";
-	char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
-
-	char* res = (strcmp(path, "/") == 0) ? sucRes : failRes;
-		
-		
-	send(sock_fd,res,strlen(res),0);
-	
-	
+	if(pathType == NULL)
+	{
+		char* sucRes = "HTTP/1.1 200 OK\r\n\r\n";
+		send(sock_fd,sucRes,strlen(sucRes),0);
+	}
+	else if(strcmp(pathType, "echo") == 0)
+	{
+		char* echoWord = strtok(NULL,"/");
+		char* res;
+		asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(echoWord), echoWord);
+		send(sock_fd,res,strlen(res),0);
+	}
+	else
+	{
+		char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
+			
+		send(sock_fd,failRes,strlen(failRes),0);
+	}
 
 	
 	close(server_fd);
