@@ -156,7 +156,7 @@ header headerParser(node headerStart, int* numberOfHeaders)
 	node* ptrRaw = &headerStart;
 	header* ptrHeader = &headers;
 
-	for(int i = 0; i < numberOfHeaders; ++i)
+	for(int i = 0; i < *numberOfHeaders; ++i)
 	{
 		char* label = strtok(ptrRaw->argument,": ");
 		char* value = strtok(NULL,": ");
