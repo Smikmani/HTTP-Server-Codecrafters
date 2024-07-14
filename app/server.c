@@ -7,9 +7,219 @@
 #include <errno.h>
 #include <unistd.h>
 
+typedef enum 
+{
+	HTTP_GET
+}http_method;
 
+typedef enum 
+{
+	HTTP_1_1
+}http_version;
+
+typedef enum 
+{
+	ECHO,
+	USER_AGENT
+}req_type;
+
+typedef struct node
+{
+	char* argument;
+	struct node *next;
+}node;
+
+typedef struct path
+{
+	size_t numOfArguments;
+	node arguments;
+}path;
+
+typedef struct req_line
+{
+	http_method method;
+	path path;
+	http_version version;
+}req_line;
+
+
+typedef struct header
+{
+	char* label;
+	char* value;
+	struct header *next;
+}header;
+
+typedef struct req_header
+{
+	int headersNumber;
+	header headers;
+}req_header;
+
+typedef struct http_req
+{
+	req_line req_line;
+	req_header req_header;
+	char* req_body;
+}http_req;
+
+size_t getNumberOfArguments(char *rawPath)
+{
+	size_t lengthOfRawPath = strlen(rawPath);
+	char placeholderPath[lengthOfRawPath+1];
+	strcpy(placeholderPath,rawPath);
+
+	size_t numberOfArguments = 0;
+
+	char* token = strtok(placeholderPath,"/");
+
+	while(token != NULL)
+	{
+		numberOfArguments += 1;
+		token = strtok(NULL,"/");
+	}
+
+	return numberOfArguments;
+}
+
+path pathParser(char* rawPath)
+{
+	path path = {0};
+	
+	path.numOfArguments = getNumberOfArguments(rawPath);
+
+	if(path.numOfArguments == 0) return path;
+	
+	char* token = strtok(rawPath,"/");
+
+	node *placeholder = &path.arguments;
+
+	while(token != NULL)
+	{
+		node argument = {0};
+		argument.argument = malloc(sizeof(char) * strlen(token) + 1);
+		argument.next = (node *)malloc(sizeof(node));
+		strcpy(argument.argument,token);
+		*placeholder = argument;
+		placeholder = placeholder->next;
+		token = strtok(NULL,"/");
+	}
+	
+	return path;
+}
+
+req_line reqLineParser(char* rawReqLine)
+{
+	req_line req_line = {0};
+	
+	char* method = strtok(rawReqLine," ");
+	char* path = strtok(NULL," ");
+	char* version = strtok(NULL," ");
+
+	if(strcmp(method,"GET")==0)
+	{
+		req_line.method = HTTP_GET;
+	}
+
+	req_line.path = pathParser(path);
+
+	if(strcmp(version,"HTTP/1.1")==0)
+	{
+		req_line.version = HTTP_1_1;
+	}
+
+	return req_line;
+}
+
+int getNumberOfHeaders(char* rawReq)
+{
+
+	size_t lengthOfRawReq = strlen(rawReq);
+	char placeholderReq[lengthOfRawReq];
+	strcpy(placeholderReq,rawReq);
+	int numberOfHeaders = -1;
+
+	char* token = strtok(placeholderReq,"\r\n");
+	
+	while(token != NULL)
+	{
+		numberOfHeaders += 1;
+		token = strtok(NULL,"\r\n");
+	}
+
+	return numberOfHeaders;
+}
+
+header headerParser(node headerStart, int* numberOfHeaders)
+{
+	header headers = {0};
+	node* ptrRaw = &headerStart;
+	header* ptrHeader = &headers;
+	printf("%d\n",numberOfHeaders);
+
+	for(int i = 0; i < numberOfHeaders; ++i)
+	{
+		char* label = strtok(ptrRaw->argument,": ");
+		char* value = strtok(NULL,": ");
+		if(value == NULL) 
+		{
+			break;
+			*numberOfHeaders -= 1;
+		}
+		printf("label: %s value: %s\n",label,value);
+		ptrHeader->label = malloc(sizeof(char) * strlen(label) + 1);
+		strcpy(ptrHeader->label,label);
+
+		ptrHeader->value = malloc(sizeof(char) * strlen(value) + 1);
+		strcpy(ptrHeader->value,value);
+
+		ptrHeader->next = (header *)malloc(sizeof(header)); 
+
+		ptrHeader = ptrHeader->next;
+		ptrRaw = ptrRaw->next;
+	}
+
+	header* ptr = &headers;
+
+	
+	return headers;
+}
+
+http_req httpReqParser(char* rawReq)
+{
+	http_req req = {0};
+	printf("%s\n",rawReq);
+
+	req.req_header.headersNumber = getNumberOfHeaders(rawReq);
+
+	char* rawReqLine = strtok(rawReq,"\r\n");
+
+	header *header = &req.req_header.headers;
+
+	node head = {0};
+	node* ptr = &head;
+	
+	for(int i = 0; i < req.req_header.headersNumber; ++i)
+	{
+		char* rawHeader = strtok(NULL,"\r\n");
+		ptr->argument = malloc(sizeof(char) * strlen(rawHeader) + 1);
+		if(i < req.req_header.headersNumber-1) ptr->next = (node *)malloc(sizeof(node));
+
+		strcpy(ptr->argument,rawHeader);
+		ptr = ptr->next;
+	}
+	
+	req.req_body = strtok(NULL,"\r\n");
+
+	req.req_line = reqLineParser(rawReqLine);
+
+	req.req_header.headers = headerParser(head,&req.req_header.headersNumber);
+
+	return req;
+}
 
 int main() {
+
 	// Disable output buffering
 	setbuf(stdout, NULL);
  	setbuf(stderr, NULL);
@@ -65,30 +275,73 @@ int main() {
 		printf("recv failed\n");
 	}
 
-	char* method = strtok(buffer," ");
-	char* path = strtok(NULL," ");
-
-	char* pathType = strtok(path,"/");
-
-	if(pathType == NULL)
+	http_req req = httpReqParser(buffer);
+	
+	if(req.req_line.path.numOfArguments == 0)
 	{
 		char* sucRes = "HTTP/1.1 200 OK\r\n\r\n";
 		send(sock_fd,sucRes,strlen(sucRes),0);
-	}
-	else if(strcmp(pathType, "echo") == 0)
-	{
-		char* echoWord = strtok(NULL,"/");
-		char* res;
-		asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(echoWord), echoWord);
-		send(sock_fd,res,strlen(res),0);
+		close(server_fd);
+		return 0;
+
 	}
 	else
 	{
-		char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
-			
-		send(sock_fd,failRes,strlen(failRes),0);
-	}
 
+		node* pathArgument = &req.req_line.path.arguments;
+
+		req_type type;
+
+		for(int i = 0; i < req.req_line.path.numOfArguments; ++i)
+		{
+			
+			if(i==0)
+			{
+				if(strcmp(pathArgument->argument, "echo") == 0)
+				{
+					type = ECHO;
+				}
+				else if(strcmp(pathArgument->argument, "user-agent") == 0)
+				{
+					printf("%s\n",req.req_header.headers.label);
+					type = USER_AGENT;
+					header* ptrHeader = &req.req_header.headers;
+					while(ptrHeader->next != NULL)
+					{
+						printf("%s\n",ptrHeader->label);
+						
+						if(strcmp(ptrHeader->label,"User-Agent") == 0)
+						{
+							char* res;
+							asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(ptrHeader->value), ptrHeader->value);
+							send(sock_fd,res,strlen(res),0);
+							close(server_fd);
+							return 0;
+						}
+						ptrHeader = ptrHeader->next;
+					}
+				}
+			
+			}
+			else if(i==1)
+			{
+
+				if(type == ECHO)
+				{
+					char* res;
+					asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(pathArgument->argument), pathArgument->argument);
+					send(sock_fd,res,strlen(res),0);
+					close(server_fd);
+					return 0;
+				}
+			}
+			
+			pathArgument =  pathArgument->next;
+		}
+	}
+	
+	char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
+	send(sock_fd,failRes,strlen(failRes),0);
 	
 	close(server_fd);
 
