@@ -298,6 +298,7 @@ int main() {
 			{
 				if(strcmp(pathArgument->argument, "echo") == 0)
 				{
+					printf("echp\n");
 					type = ECHO;
 				}
 				else if(strcmp(pathArgument->argument, "user-agent") == 0)
