@@ -155,7 +155,6 @@ header headerParser(node headerStart, int* numberOfHeaders)
 	header headers = {0};
 	node* ptrRaw = &headerStart;
 	header* ptrHeader = &headers;
-	printf("%d\n",numberOfHeaders);
 
 	for(int i = 0; i < numberOfHeaders; ++i)
 	{
