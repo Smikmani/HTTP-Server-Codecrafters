@@ -228,8 +228,9 @@ void* handleReq(void* sock)
 	{
 		printf("recv failed\n");
 	}
-
+	printf("a\n");
 	http_req req = httpReqParser(buffer);
+	printf("b\n");
 	
 	if(req.req_line.path.numOfArguments == 0)
 	{
