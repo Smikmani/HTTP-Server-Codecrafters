@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <pthread.h>
 
+static char *directory;
+
 typedef enum 
 {
 	HTTP_GET
@@ -21,7 +23,8 @@ typedef enum
 typedef enum 
 {
 	ECHO,
-	USER_AGENT
+	USER_AGENT,
+	FILER
 }req_type;
 
 typedef struct node
@@ -228,9 +231,8 @@ void* handleReq(void* sock)
 	{
 		printf("recv failed\n");
 	}
-	printf("a\n");
+	
 	http_req req = httpReqParser(buffer);
-	printf("b\n");
 	
 	if(req.req_line.path.numOfArguments == 0)
 	{
@@ -253,7 +255,6 @@ void* handleReq(void* sock)
 			{
 				if(strcmp(pathArgument->argument, "echo") == 0)
 				{
-					printf("echp\n");
 					type = ECHO;
 				}
 				else if(strcmp(pathArgument->argument, "user-agent") == 0)
@@ -275,7 +276,10 @@ void* handleReq(void* sock)
 						ptrHeader = ptrHeader->next;
 					}
 				}
-			
+				else if(strcmp(pathArgument->argument, "files") == 0)
+				{
+					type = FILER;
+				}
 			}
 			else if(i==1)
 			{
@@ -284,6 +288,35 @@ void* handleReq(void* sock)
 				{
 					char* res;
 					asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(pathArgument->argument), pathArgument->argument);
+					send(sock_fd,res,strlen(res),0);
+					return 0;
+				}
+				else if(type == FILER)
+				{
+					printf("FILE path\n");
+
+					char* filename = pathArgument->argument;
+					char fullPath[strlen(directory) + strlen(filename) + 1];
+					strcpy(fullPath,directory);
+					strcat(fullPath,filename);
+					FILE *fptr;
+
+					fptr = fopen(fullPath, "r");
+					if(fptr == NULL)
+					{
+						char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
+						send(sock_fd,failRes,strlen(failRes),0);
+						return 0;
+					}
+					char fileContent[500];
+
+					fgets(fileContent, 500, fptr);
+
+					printf("%s\n", fileContent);
+
+					fclose(fptr);
+					char* res;
+					asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %zu\r\n\r\n%s", strlen(fileContent), fileContent);
 					send(sock_fd,res,strlen(res),0);
 					return 0;
 				}
@@ -298,12 +331,18 @@ void* handleReq(void* sock)
 	return 0;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 
 	// Disable output buffering
 	setbuf(stdout, NULL);
  	setbuf(stderr, NULL);
-
+	if(argc >= 3)
+	{
+		if(strcmp(argv[1],"--directory") == 0)
+		{
+			directory = argv[2];
+		}
+	}
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	printf("Logs from your program will appear here!\n");
 
