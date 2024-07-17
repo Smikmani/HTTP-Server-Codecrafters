@@ -12,7 +12,8 @@ static char *directory;
 
 typedef enum 
 {
-	HTTP_GET
+	HTTP_GET,
+	HTTP_POST
 }http_method;
 
 typedef enum 
@@ -124,6 +125,10 @@ req_line reqLineParser(char* rawReqLine)
 	{
 		req_line.method = HTTP_GET;
 	}
+	else if(strcmp(method,"POST")==0)
+	{
+		req_line.method = HTTP_POST;
+	}
 
 	req_line.path = pathParser(path);
 
@@ -143,7 +148,7 @@ int getNumberOfHeaders(char* rawReq)
 	strcpy(placeholderReq,rawReq);
 	int numberOfHeaders = -1;
 
-	char* token = strtok(placeholderReq,"\r\n");
+	char* token = strtok(placeholderReq,"\r\n\r\n");
 	
 	while(token != NULL)
 	{
@@ -196,8 +201,11 @@ http_req httpReqParser(char* rawReq)
 
 	req.req_header.headersNumber = getNumberOfHeaders(rawReq);
 
+	char* body = strstr(rawReq,"\r\n\r\n") + 4;
+	req.req_body = malloc(sizeof(char) * strlen(body) + 1);
+	strcpy(req.req_body,body);
 	char* rawReqLine = strtok(rawReq,"\r\n");
-
+	
 	header *header = &req.req_header.headers;
 
 	node head = {0};
@@ -213,7 +221,6 @@ http_req httpReqParser(char* rawReq)
 		ptr = ptr->next;
 	}
 	
-	req.req_body = strtok(NULL,"\r\n");
 
 	req.req_line = reqLineParser(rawReqLine);
 
@@ -293,32 +300,50 @@ void* handleReq(void* sock)
 				}
 				else if(type == FILER)
 				{
-					printf("FILE path\n");
-
 					char* filename = pathArgument->argument;
 					char fullPath[strlen(directory) + strlen(filename) + 1];
 					strcpy(fullPath,directory);
 					strcat(fullPath,filename);
 					FILE *fptr;
-
-					fptr = fopen(fullPath, "r");
-					if(fptr == NULL)
+					switch(req.req_line.method)
 					{
-						char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
-						send(sock_fd,failRes,strlen(failRes),0);
-						return 0;
+						case HTTP_GET:
+						{
+							
+							fptr = fopen(fullPath, "r");
+							if(fptr == NULL)
+							{
+								char* failRes = "HTTP/1.1 404 Not Found\r\n\r\n";
+								send(sock_fd,failRes,strlen(failRes),0);
+								return 0;
+							}
+							char fileContent[500];
+
+							fgets(fileContent, 500, fptr);
+
+							printf("%s\n", fileContent);
+
+							fclose(fptr);
+							char* res;
+							asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %zu\r\n\r\n%s", strlen(fileContent), fileContent);
+							send(sock_fd,res,strlen(res),0);
+							return 0;
+						}
+						case HTTP_POST:
+						{
+							fptr = fopen(fullPath, "w");
+
+							fprintf(fptr, req.req_body);
+
+							fclose(fptr);
+
+							char* createdRes = "HTTP/1.1 201 Created\r\n\r\n";
+							send(sock_fd,createdRes,strlen(createdRes),0);
+							return 0;
+
+						}
 					}
-					char fileContent[500];
-
-					fgets(fileContent, 500, fptr);
-
-					printf("%s\n", fileContent);
-
-					fclose(fptr);
-					char* res;
-					asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %zu\r\n\r\n%s", strlen(fileContent), fileContent);
-					send(sock_fd,res,strlen(res),0);
-					return 0;
+					
 				}
 			}
 			
