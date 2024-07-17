@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -209,6 +210,20 @@ header* getHeaderByLabel(http_req* req,char* label)
 	return NULL;
 } 
 
+bool checkHeaderContainsValue(header* head,char* label)
+{
+	char* value = strtok(head->value,", ");
+	while(value != NULL)
+	{
+		if(strcmp(value,label) == 0)
+		{
+			return true;
+		}
+		value = strtok(NULL, ", ");
+	}
+	return false;
+}
+
 http_req httpReqParser(char* rawReq)
 {
 	http_req req = {0};
@@ -304,7 +319,7 @@ void* handleReq(void* sock)
 				if(type == ECHO)
 				{
 					header* headerEncoding = getHeaderByLabel(&req,"Accept-Encoding");
-					if(headerEncoding == NULL || strcmp(headerEncoding->value,"gzip") != 0)
+					if(headerEncoding == NULL || checkHeaderContainsValue(headerEncoding,"gzip") != 0)
 					{
 						char* res;
 						asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(pathArgument->argument), pathArgument->argument);
