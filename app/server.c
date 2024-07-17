@@ -194,6 +194,21 @@ header headerParser(node headerStart, int* numberOfHeaders)
 	return headers;
 }
 
+header* getHeaderByLabel(http_req* req,char* label)
+{
+	header* ptrHeader = &req->req_header.headers;
+	while(ptrHeader->next != NULL)
+	{
+						
+		if(strcmp(ptrHeader->label,label) == 0)
+		{
+			return ptrHeader;
+		}
+		ptrHeader = ptrHeader->next;
+	}
+	return NULL;
+} 
+
 http_req httpReqParser(char* rawReq)
 {
 	http_req req = {0};
@@ -229,6 +244,7 @@ http_req httpReqParser(char* rawReq)
 	return req;
 }
 
+
 void* handleReq(void* sock)
 {
 	int sock_fd = *((int *)sock);
@@ -243,6 +259,7 @@ void* handleReq(void* sock)
 	
 	if(req.req_line.path.numOfArguments == 0)
 	{
+
 		char* sucRes = "HTTP/1.1 200 OK\r\n\r\n";
 		send(sock_fd,sucRes,strlen(sucRes),0);
 		return 0;
@@ -266,21 +283,14 @@ void* handleReq(void* sock)
 				}
 				else if(strcmp(pathArgument->argument, "user-agent") == 0)
 				{
-					printf("%s\n",req.req_header.headers.label);
 					type = USER_AGENT;
-					header* ptrHeader = &req.req_header.headers;
-					while(ptrHeader->next != NULL)
+					header* headerUA = getHeaderByLabel(&req,"User-Agent");
+					if(headerUA != NULL)
 					{
-						printf("%s\n",ptrHeader->label);
-						
-						if(strcmp(ptrHeader->label,"User-Agent") == 0)
-						{
-							char* res;
-							asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(ptrHeader->value), ptrHeader->value);
-							send(sock_fd,res,strlen(res),0);
-							return 0;
-						}
-						ptrHeader = ptrHeader->next;
+						char* res;
+						asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(headerUA->value), headerUA->value);
+						send(sock_fd,res,strlen(res),0);
+						return 0;
 					}
 				}
 				else if(strcmp(pathArgument->argument, "files") == 0)
@@ -293,10 +303,22 @@ void* handleReq(void* sock)
 
 				if(type == ECHO)
 				{
-					char* res;
-					asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(pathArgument->argument), pathArgument->argument);
-					send(sock_fd,res,strlen(res),0);
-					return 0;
+					header* headerEncoding = getHeaderByLabel(&req,"Accept-Encoding");
+					if(headerEncoding == NULL || strcmp(headerEncoding->value,"gzip") != 0)
+					{
+						char* res;
+						asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(pathArgument->argument), pathArgument->argument);
+						send(sock_fd,res,strlen(res),0);
+						return 0;
+					}
+					else
+					{
+						char* res;
+						asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(pathArgument->argument), pathArgument->argument);
+						send(sock_fd,res,strlen(res),0);
+						return 0;
+					}
+					
 				}
 				else if(type == FILER)
 				{
