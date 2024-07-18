@@ -160,28 +160,32 @@ int getNumberOfHeaders(char* rawReq)
 	return numberOfHeaders;
 }
 
-header headerParser(node headerStart, int* numberOfHeaders)
+void rawHeaderParser(header* head, char* rawHeader)
+{
+	char* value = strstr(rawHeader,": ") + 2;
+	printf("value %s ",value);
+	head->value = malloc(sizeof(char) * strlen(value) + 1);
+	strcpy(head->value,value);
+
+	char* label = strtok(rawHeader,": ");
+	printf("label %s\n",label);
+
+	head->label = malloc(sizeof(char) * strlen(label) + 1);
+	strcpy(head->label,label);
+
+	
+
+}
+
+header headerParser(node headerStart, int numberOfHeaders)
 {
 	header headers = {0};
 	node* ptrRaw = &headerStart;
 	header* ptrHeader = &headers;
 
-	for(int i = 0; i < *numberOfHeaders; ++i)
+	for(int i = 0; i < numberOfHeaders; ++i)
 	{
-		char* label = strtok(ptrRaw->argument,": ");
-		char* value = strtok(NULL,": ");
-
-		if(value == NULL) 
-		{
-			break;
-			*numberOfHeaders -= 1;
-		}
-
-		ptrHeader->label = malloc(sizeof(char) * strlen(label) + 1);
-		strcpy(ptrHeader->label,label);
-
-		ptrHeader->value = malloc(sizeof(char) * strlen(value) + 1);
-		strcpy(ptrHeader->value,value);
+		rawHeaderParser(ptrHeader,ptrRaw->argument);
 
 		ptrHeader->next = (header *)malloc(sizeof(header)); 
 
@@ -189,9 +193,6 @@ header headerParser(node headerStart, int* numberOfHeaders)
 		ptrRaw = ptrRaw->next;
 	}
 
-	header* ptr = &headers;
-
-	
 	return headers;
 }
 
@@ -212,9 +213,11 @@ header* getHeaderByLabel(http_req* req,char* label)
 
 bool checkHeaderContainsValue(header* head,char* label)
 {
+	printf("FULL value: %s\n",head->value);
 	char* value = strtok(head->value,", ");
 	while(value != NULL)
 	{
+		printf("value : %s\n",value);
 		if(strcmp(value,label) == 0)
 		{
 			return true;
@@ -229,11 +232,13 @@ http_req httpReqParser(char* rawReq)
 	http_req req = {0};
 	printf("%s\n",rawReq);
 
-	req.req_header.headersNumber = getNumberOfHeaders(rawReq);
-
 	char* body = strstr(rawReq,"\r\n\r\n") + 4;
 	req.req_body = malloc(sizeof(char) * strlen(body) + 1);
 	strcpy(req.req_body,body);
+
+	req.req_header.headersNumber = strlen(req.req_body) == 0 ? getNumberOfHeaders(rawReq) : getNumberOfHeaders(rawReq) - 1;
+
+	printf("Number of headers: %d\n", req.req_header.headersNumber);
 	char* rawReqLine = strtok(rawReq,"\r\n");
 	
 	header *header = &req.req_header.headers;
@@ -254,7 +259,7 @@ http_req httpReqParser(char* rawReq)
 
 	req.req_line = reqLineParser(rawReqLine);
 
-	req.req_header.headers = headerParser(head,&req.req_header.headersNumber);
+	req.req_header.headers = headerParser(head,req.req_header.headersNumber);
 
 	return req;
 }
@@ -319,7 +324,7 @@ void* handleReq(void* sock)
 				if(type == ECHO)
 				{
 					header* headerEncoding = getHeaderByLabel(&req,"Accept-Encoding");
-					if(headerEncoding == NULL || checkHeaderContainsValue(headerEncoding,"gzip") != 0)
+					if(headerEncoding == NULL || checkHeaderContainsValue(headerEncoding,"gzip") == false)
 					{
 						char* res;
 						asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(pathArgument->argument), pathArgument->argument);
