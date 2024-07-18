@@ -8,6 +8,8 @@
 #include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <zlib.h>
+#include <assert.h>
 
 static char *directory;
 
@@ -163,17 +165,12 @@ int getNumberOfHeaders(char* rawReq)
 void rawHeaderParser(header* head, char* rawHeader)
 {
 	char* value = strstr(rawHeader,": ") + 2;
-	printf("value %s ",value);
 	head->value = malloc(sizeof(char) * strlen(value) + 1);
 	strcpy(head->value,value);
 
 	char* label = strtok(rawHeader,": ");
-	printf("label %s\n",label);
-
 	head->label = malloc(sizeof(char) * strlen(label) + 1);
 	strcpy(head->label,label);
-
-	
 
 }
 
@@ -213,11 +210,9 @@ header* getHeaderByLabel(http_req* req,char* label)
 
 bool checkHeaderContainsValue(header* head,char* label)
 {
-	printf("FULL value: %s\n",head->value);
 	char* value = strtok(head->value,", ");
 	while(value != NULL)
 	{
-		printf("value : %s\n",value);
 		if(strcmp(value,label) == 0)
 		{
 			return true;
@@ -333,9 +328,30 @@ void* handleReq(void* sock)
 					}
 					else
 					{
+						char compressionOutput[500];
+						int ret;
+						z_stream strm;
+
+						strm.zalloc = Z_NULL;
+						strm.zfree = Z_NULL;
+						strm.opaque = Z_NULL;
+						strm.avail_in = strlen(pathArgument->argument);
+						strm.next_in = (Bytef *)pathArgument->argument;
+						strm.avail_out = 500;
+            			strm.next_out = (Bytef *)compressionOutput; 
+
+						deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8,
+									Z_DEFAULT_STRATEGY);
+						deflate(&strm, Z_FINISH);
+						deflateEnd(&strm);
+						printf("compression output LENGTH: %zu\n",strlen(compressionOutput));
 						char* res;
-						asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s", strlen(pathArgument->argument), pathArgument->argument);
+						asprintf(&res, "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n", strm.total_out);
+						deflateEnd(&strm);
+
 						send(sock_fd,res,strlen(res),0);
+						
+    					send(sock_fd, compressionOutput, strm.total_out, 0);
 						return 0;
 					}
 					
