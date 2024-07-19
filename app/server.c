@@ -350,7 +350,6 @@ void* handleReq(void* sock)
 						deflateEnd(&strm);
 
 						send(sock_fd,res,strlen(res),0);
-						
     					send(sock_fd, compressionOutput, strm.total_out, 0);
 						return 0;
 					}
